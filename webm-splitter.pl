@@ -22,6 +22,6 @@ my $length = int($$ffprobe_out{format}->{duration});
 
 # split and encode
 for(my $i = $offset; $i < $length; $i += $cliplen) {
-  my $ffmpegcmd = "ffmpeg -ss $i -t $cliplen -i '$input_clean' -c:v libvpx -crf $crf -b:v $bitrate -an '" . $filename . "_$i.webm'";
+  my $ffmpegcmd = "ffmpeg -ss $i -i '$input_clean' -t $cliplen -c:v libvpx -crf $crf -b:v $bitrate -an '" . $filename . "_$i.webm'";
   my $ffmpegout = `$ffmpegcmd`;
 }
