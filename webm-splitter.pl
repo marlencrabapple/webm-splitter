@@ -10,7 +10,7 @@ my $input = $ARGV[0] or die "No input video.\n";
 my $cliplen = $ARGV[1] || 30;
 my $offset = $ARGV[2] || 0;
 my $bitrate = $ARGV[3] || "1M";
-my $crf = $ARG[4] || 10;
+my $crf = $ARGV[4] || 10;
 
 # get clean filename, path, etc.
 my ($filename, $path, $suffix) = fileparse($input);
