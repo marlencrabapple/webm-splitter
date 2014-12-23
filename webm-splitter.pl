@@ -39,8 +39,10 @@ my $length = $stopat || int($$ffprobe_out{format}->{duration});
 
 # split and encode
 for(my $i = $offset; $i < $length; $i += $cliplen) {
+  $cliplen = $length - $i if $length - $i < $cliplen;
+
   my $ffmpegcmd = "ffmpeg -ss $i -i '$input_clean' -t $cliplen -c:v libvpx -crf $crf -b:v $bitrate -an $vf $ffmpegargs '" . $filename . "_$i.webm'";
   print "$ffmpegcmd:\n\n";
-  
+
   `$ffmpegcmd`;
 }
