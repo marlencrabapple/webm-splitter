@@ -6,7 +6,7 @@ use JSON;
 use Getopt::Long;
 use File::Basename;
 
-my ($input, $cliplen, $offset, $stopat, $bitrate, $crf, $vf, $ffmpegargs);
+my ($input, $cliplen, $offset, $stopat, $bitrate, $crf, $vf, $ffmpegargs, $audio);
 
 # set defaults
 $cliplen = 30;
@@ -23,11 +23,13 @@ GetOptions(
   'bitrate|b=s' => \$bitrate,
   'crf|q=i' => \$crf,
   'vfoptions|vf=s' => \$vf,
+  'audio|a' => \$audio,
   'additionalargs|ffmpegargs|cl|opts=s' => \$ffmpegargs
 );
 
-die "No input provided." unless $input;
+die 'No input provided.' unless $input;
 $vf = "-vf $vf" if $vf;
+$audio = '-an' ? !$audio : '';
 
 # get clean filename, path, etc.
 my ($filename, $path, $suffix) = fileparse($input);
@@ -41,7 +43,7 @@ my $length = $stopat || int($$ffprobe_out{format}->{duration});
 for(my $i = $offset; $i < $length; $i += $cliplen) {
   $cliplen = $length - $i if $length - $i < $cliplen;
 
-  my $ffmpegcmd = "ffmpeg -ss $i -i '$input_clean' -t $cliplen -c:v libvpx -crf $crf -b:v $bitrate -an $vf $ffmpegargs '" . $filename . "_$i.webm'";
+  my $ffmpegcmd = "ffmpeg -ss $i -i '$input_clean' -t $cliplen $audio -c:v libvpx -crf $crf -b:v $bitrate $vf $ffmpegargs '" . $filename . "_$i.webm'";
   print "$ffmpegcmd:\n\n";
 
   `$ffmpegcmd`;
