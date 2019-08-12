@@ -1,1 +1,5 @@
 *.webm
+.vstags
+local
+*.log
+cpanfile.snapshot
