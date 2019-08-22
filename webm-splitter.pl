@@ -5,77 +5,111 @@ use warnings;
 
 use feature 'say';
 
-use Getopt::Long;
+use Path::Tiny;
 use Data::Printer;
 use JSON::MaybeXS;
-use File::Basename;
 use Syntax::Keyword::Try;
+use Capture::Tiny 'capture';
+use Getopt::Long qw(GetOptions GetOptionsFromString);
 
-my ($input, $cliplen, $offset, $stopat, $bitrate, $crf, $vf, $audio, $two_pass, $ffmpegargs);
+my @warn = qw(ss t to);
 
-# set defaults
+my ($input, $cliplen, $offset, $duration, $bitrate, $crf, $vf, $audio, $two_pass);
+
+# Set defaults
 $cliplen = 30;
 $offset = 0;
-$bitrate = "1M";
-$crf = 10;
+# $bitrate = '1M';
+# $crf = 10;
 
-# handle command line args
+# Handle command line args
+Getopt::Long::Configure('pass_through');
+
 GetOptions(
   'input|i=s' => \$input,
-  'cliplength|l=i' => \$cliplen,
+  'cliplength|clipduration|l=i' => \$cliplen,
   'offset|startat|o=i' => \$offset,
-  'stopat|roffset|s=i' => \$stopat,
-  'bitrate|b=s' => \$bitrate,
-  'crf|q=i' => \$crf,
-  'vfoptions|vf=s' => \$vf,
-  'audio|a=s' => \$audio,
+  'duration|stopat|d=i' => \$duration,
+  #'bitrate|b=s' => \$bitrate,
+  #'crf|q=i' => \$crf,
+  #'vfoptions|vf=s' => \$vf,
+  #'audio|a=s' => \$audio,
   '2pass|2p:s' => \$two_pass,
-  'additionalargs|ffmpegargs|cl|opts=s' => \$ffmpegargs
+  #'additionalargs|ffmpegargs|cl|opts=s' => \$ffmpegargs
 );
 
-die 'No input provided.' unless $input;
+die 'No input file provided.' unless $input;
+die 'Input file not found.' unless -e $input;
 
-$vf = $vf ? "-vf $vf" : '';
-$audio //= '-an';
+#p(@ARGV);
+
+#Getopt::Long::Configure('pass_through');
+my ($ret, $ffmpegargs) = GetOptionsFromString(join(' ', @ARGV));
+p($ffmpegargs);
+
+#my $p = Getopt::Long::Parser->new( config => [ 'pass_through' ] );
+
+#my ($ret, $args) = $p->GetOptionsFromString($audio);
+
+#$vf = $vf ? "-vf $vf" : '';
+
+# Getopt::Long::Configure('pass_through');
+#my ($ret, $audio) = GetOptionsFromString($audio) if $audio;
+#my ($ret, $ffmpegargs) = GetOptionsFromString($audio) if $audio;
+
+#$audio //= '-an';
 
 if(defined($two_pass)) {
   $two_pass ||= '/dev/null';
-  $crf = ''
+  #$crf = ''
 }
 else {
-  $crf = "-crf $crf"
+  #$crf = "-crf $crf"
 }
 
-# get clean filename, path, etc.
-my ($filename, $path, $suffix) = fileparse($input);
-my $input_clean = $path . $filename;
+# Get clean filename, path, etc.
+my $file = path($input);
 
-my $ffprobe_out = `ffprobe -v quiet -print_format json -show_format -show_streams '$input_clean'`;
+# Get video duration
+my ($stdout, $stderr, $exit) = capture {
+  system(qw(ffprobe -v quiet -print_format json -show_format -show_streams), $file)
+};
 
-# get video duration
+die "$exit: $stderr" if $stderr;
+
+my $ffprobe_out;
+
 try {
-  $ffprobe_out = decode_json($ffprobe_out)
+  $ffprobe_out = decode_json($stdout)
 }
 catch {
   die "$@:\n$ffprobe_out"
 }
 
-my $length = $stopat || int($$ffprobe_out{format}->{duration});
+my $length = $duration || int($ffprobe_out->{format}{duration});
 
-# split and encode
-for(my $i = $offset; $i < $length; $i += $cliplen) {
+# Split and encode
+for (my $i = $offset; $i < $length; $i += $cliplen) {
   $cliplen = $length - $i if $length - $i < $cliplen;
 
-  my $filename = "'" . $filename . "_$i.webm'";
+  #my $filename = "'" . $filename . "_$i.webm'";
 
-  my $ffmpeg_cmd_start = "ffmpeg -ss $i -i '$input_clean' -t $cliplen";
-  my $ffmpeg_cmd_end = "-c:v libvpx $crf -b:v $bitrate -f webm $vf $ffmpegargs";
+  my $outfile = path("$file\_$i.webm");
+  my @args_start = (qw(ffmpeg -ss), $i, '-i', $file, '-t', $cliplen);
+
+  # Not sure if $ffmpegargs will work as expected this way
+  my @args_end = (qw(-c:v libvpx -f webm));
+
+  #push @args_end, ('-vf', $vf) if $vf;
+  #push @args_end, @ffmpegargs if scalar @ffmpegargs;
 
   if($two_pass) {
-    `$ffmpeg_cmd_start -y -pass 1 -an $ffmpeg_cmd_end $two_pass`;
-    `$ffmpeg_cmd_start -pass 2 $audio $ffmpeg_cmd_end $filename`
+    system(@args_start, qw(-y -pass 1), @args_end, '-an', $two_pass); # Maybe I do need to store audio stuff in a variable
+                                                                      # IDK if putting '-an' at the end overrides earlier audio options
+
+    system(@args_start, qw(-y -pass 2), @args_end, $outfile)
   }
   else {
-    `$ffmpeg_cmd_start $audio $ffmpeg_cmd_end $filename`
+    system(@args_start, $audio, @args_end, $outfile)
   }
 }
